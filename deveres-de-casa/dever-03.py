@@ -24,8 +24,8 @@ def verificar_palindromo(arr):
 
     return recursao(0, len(arr) - 1)
 
-# --- Testes dos exemplos da imagem ---
-print("--- Testes do Professor ---")
+# Testes
+print("Testes: ")
 exemplos = [
     [0, 1, 2, 3, 2, 1, 0],
     ["a", "b", "b", "a"],
@@ -37,7 +37,7 @@ for i, ex in enumerate(exemplos, 1):
     status = "É palíndromo" if verificar_palindromo(ex) else "Não é palíndromo"
     print(f"array{i} = {ex} -> {status}")
 
-print("\n--- Testes de Desempenho ---")
+print("\n testes de desempenho:")
 # Testes e medição de tempo (usando arrays preenchidos com zeros só para forçar o pior caso)
 for n in [10, 100, 500, 1000]:
     array_teste = [0] * n # Cria um palíndromo de tamanho n
