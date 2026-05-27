@@ -1,0 +1,328 @@
+#!/usr/bin/env python3
+"""
+Dever 2 - Bellman-Ford em um grafo direcionado.
+
+O grafo do enunciado tem 5 vertices e pesos positivos e negativos.
+Como existe peso negativo, o algoritmo mais adequado para menor caminho e o
+Bellman-Ford, pois ele tambem consegue verificar se existe ciclo negativo.
+
+Grafo usado:
+0 -> 1 com peso 5
+1 -> 2 com peso 1
+1 -> 3 com peso 2
+2 -> 4 com peso 1
+4 -> 3 com peso -1
+"""
+
+from dataclasses import dataclass
+from math import inf
+from typing import Dict, List, Optional, Tuple
+
+
+@dataclass(frozen=True)
+class Aresta:
+    """Representa uma aresta direcionada: origem -> destino com um peso."""
+
+    origem: int
+    destino: int
+    peso: int
+
+
+class BellmanFord:
+    """
+    Implementa o algoritmo Bellman-Ford.
+
+    A ideia do algoritmo e relaxar todas as arestas varias vezes.
+    Relaxar significa perguntar:
+    "Consigo chegar no destino com uma distancia menor passando pela origem?"
+
+    Para um grafo com V vertices, o menor caminho simples pode ter no maximo
+    V - 1 arestas. Por isso o Bellman-Ford executa V - 1 iteracoes.
+    Depois disso, fazemos uma passada extra para descobrir ciclo negativo.
+    """
+
+    def __init__(self, quantidade_vertices: int, arestas: List[Aresta]) -> None:
+        self.quantidade_vertices = quantidade_vertices
+        self.arestas = arestas
+
+    def executar(self, origem: int) -> Tuple[List[Dict[int, Tuple[float, Optional[int]]]], bool]:
+        """
+        Executa o Bellman-Ford a partir de um vertice de origem.
+
+        Retorna:
+        - historico: uma lista com a tabela de distancias/predecessores por iteracao.
+        - tem_ciclo_negativo: True se existir ciclo negativo alcancavel da origem.
+        """
+        self._validar_vertice(origem)
+
+        # Distancia infinita significa que ainda nao conhecemos caminho ate o vertice.
+        distancias = {vertice: inf for vertice in range(self.quantidade_vertices)}
+        predecessores: Dict[int, Optional[int]] = {
+            vertice: None for vertice in range(self.quantidade_vertices)
+        }
+        distancias[origem] = 0
+
+        historico = []
+
+        # Guardamos tambem o estado inicial para facilitar a demonstracao.
+        historico.append(self._snapshot(distancias, predecessores))
+
+        for _ in range(self.quantidade_vertices - 1):
+            houve_mudanca = False
+
+            for aresta in self.arestas:
+                if distancias[aresta.origem] == inf:
+                    continue
+
+                nova_distancia = distancias[aresta.origem] + aresta.peso
+
+                # Se o caminho pela origem for melhor, atualizamos distancia e predecessor.
+                if nova_distancia < distancias[aresta.destino]:
+                    distancias[aresta.destino] = nova_distancia
+                    predecessores[aresta.destino] = aresta.origem
+                    houve_mudanca = True
+
+            historico.append(self._snapshot(distancias, predecessores))
+
+            # Otimizacao: se uma iteracao nao muda nada, as proximas tambem nao mudarao.
+            if not houve_mudanca:
+                # Mesmo parando cedo, a tabela ainda pode repetir o estado para mostrar V-1 linhas.
+                while len(historico) <= self.quantidade_vertices - 1:
+                    historico.append(self._snapshot(distancias, predecessores))
+                break
+
+        tem_ciclo_negativo = self._verificar_ciclo_negativo(distancias)
+        return historico, tem_ciclo_negativo
+
+    def _verificar_ciclo_negativo(self, distancias: Dict[int, float]) -> bool:
+        """
+        Faz uma passada extra nas arestas.
+
+        Se ainda for possivel melhorar alguma distancia depois de V - 1 iteracoes,
+        entao existe ciclo negativo alcancavel pela origem.
+        """
+        for aresta in self.arestas:
+            if distancias[aresta.origem] == inf:
+                continue
+            if distancias[aresta.origem] + aresta.peso < distancias[aresta.destino]:
+                return True
+        return False
+
+    def _snapshot(
+        self,
+        distancias: Dict[int, float],
+        predecessores: Dict[int, Optional[int]],
+    ) -> Dict[int, Tuple[float, Optional[int]]]:
+        """Cria uma copia do estado atual para desenhar a tabela depois."""
+        return {
+            vertice: (distancias[vertice], predecessores[vertice])
+            for vertice in range(self.quantidade_vertices)
+        }
+
+    def _validar_vertice(self, vertice: int) -> None:
+        if vertice < 0 or vertice >= self.quantidade_vertices:
+            raise ValueError(f"Vertice invalido. Use um valor entre 0 e {self.quantidade_vertices - 1}.")
+
+
+def grafo_do_enunciado() -> BellmanFord:
+    """Monta exatamente o grafo mostrado no dever."""
+    arestas = [
+        Aresta(0, 1, 5),
+        Aresta(1, 2, 1),
+        Aresta(1, 3, 2),
+        Aresta(2, 4, 1),
+        Aresta(4, 3, -1),
+    ]
+    return BellmanFord(quantidade_vertices=5, arestas=arestas)
+
+
+def formatar_celula(distancia: float, predecessor: Optional[int]) -> str:
+    """Formata cada celula da tabela como distancia/predecessor."""
+    if distancia == inf:
+        return "inf/-"
+
+    pred = "-" if predecessor is None else str(predecessor)
+    return f"{int(distancia)}/{pred}"
+
+
+def mostrar_grafo(algoritmo: BellmanFord) -> None:
+    """Mostra as arestas do grafo no terminal."""
+    print("\nGrafo direcionado do enunciado:")
+    print("origem -> destino | peso")
+    print("-" * 25)
+    for aresta in algoritmo.arestas:
+        print(f"{aresta.origem:>6} -> {aresta.destino:<7} | {aresta.peso:>4}")
+
+
+def mostrar_tabela(historico: List[Dict[int, Tuple[float, Optional[int]]]]) -> None:
+    """
+    Desenha a tabela pedida.
+
+    As colunas sao os vertices.
+    As linhas sao as iteracoes do Bellman-Ford.
+    Cada celula mostra distancia/predecessor.
+    """
+    vertices = list(historico[0].keys())
+    largura = 12
+
+    print("\nTabela de distancias e predecessores")
+    print("Formato da celula: distancia/predecessor")
+    print("-" * (14 + largura * len(vertices)))
+
+    cabecalho = "Iteracao".ljust(14)
+    for vertice in vertices:
+        cabecalho += f"V{vertice}".center(largura)
+    print(cabecalho)
+    print("-" * (14 + largura * len(vertices)))
+
+    for indice, estado in enumerate(historico):
+        nome_linha = "Inicial" if indice == 0 else f"Iteracao {indice}"
+        linha = nome_linha.ljust(14)
+        for vertice in vertices:
+            distancia, predecessor = estado[vertice]
+            linha += formatar_celula(distancia, predecessor).center(largura)
+        print(linha)
+
+
+def reconstruir_caminho(
+    historico: List[Dict[int, Tuple[float, Optional[int]]]],
+    destino: int,
+) -> List[int]:
+    """Reconstrui o menor caminho final usando os predecessores."""
+    estado_final = historico[-1]
+    distancia, _ = estado_final[destino]
+    if distancia == inf:
+        return []
+
+    caminho = []
+    atual: Optional[int] = destino
+
+    while atual is not None:
+        caminho.append(atual)
+        _, atual = estado_final[atual]
+
+    caminho.reverse()
+    return caminho
+
+
+def explicar_complexidade(quantidade_vertices: int, quantidade_arestas: int) -> None:
+    """Mostra a complexidade do Bellman-Ford."""
+    print("\nAnalise de complexidade")
+    print("-" * 26)
+    print("Bellman-Ford relaxa todas as arestas em cada iteracao.")
+    print(f"Vertices (V): {quantidade_vertices}")
+    print(f"Arestas (E): {quantidade_arestas}")
+    print("Numero de iteracoes principais: V - 1")
+    print("Complexidade de tempo: O(V * E)")
+    print("Complexidade de memoria: O(V), pois guardamos distancias e predecessores.")
+    print("A verificacao de ciclo negativo faz uma passada extra nas arestas: O(E).")
+
+
+def demonstracao() -> None:
+    """Roda uma demonstracao completa pronta para apresentar no terminal."""
+    algoritmo = grafo_do_enunciado()
+    origem = 0
+
+    print("\n=== Demonstracao do Dever 2: Bellman-Ford ===")
+    print("Origem escolhida: vertice 0")
+    mostrar_grafo(algoritmo)
+
+    historico, tem_ciclo_negativo = algoritmo.executar(origem)
+    mostrar_tabela(historico)
+
+    print("\nMenores caminhos finais a partir do vertice 0:")
+    for destino in range(algoritmo.quantidade_vertices):
+        distancia, _ = historico[-1][destino]
+        caminho = reconstruir_caminho(historico, destino)
+        caminho_texto = " -> ".join(map(str, caminho)) if caminho else "sem caminho"
+        distancia_texto = "infinita" if distancia == inf else str(int(distancia))
+        print(f"0 ate {destino}: distancia {distancia_texto}; caminho: {caminho_texto}")
+
+    print("\nVerificacao de ciclo negativo:")
+    if tem_ciclo_negativo:
+        print("Existe ciclo negativo alcancavel a partir da origem.")
+    else:
+        print("Nao existe ciclo negativo alcancavel a partir da origem.")
+
+    explicar_complexidade(algoritmo.quantidade_vertices, len(algoritmo.arestas))
+
+
+def pedir_inteiro(mensagem: str, minimo: int, maximo: int) -> int:
+    """Le um inteiro dentro de um intervalo."""
+    while True:
+        try:
+            valor = int(input(mensagem))
+            if minimo <= valor <= maximo:
+                return valor
+            print(f"Digite um numero entre {minimo} e {maximo}.")
+        except ValueError:
+            print("Entrada invalida. Digite um numero inteiro.")
+
+
+def menu_interativo() -> None:
+    """Menu para testar o algoritmo pelo terminal."""
+    algoritmo = grafo_do_enunciado()
+    ultimo_historico: Optional[List[Dict[int, Tuple[float, Optional[int]]]]] = None
+    ultimo_ciclo: Optional[bool] = None
+
+    while True:
+        print("\n=== Dever 2 - Bellman-Ford ===")
+        print("1 - Mostrar grafo")
+        print("2 - Executar a partir do vertice 0")
+        print("3 - Executar a partir de outro vertice")
+        print("4 - Mostrar ultima tabela")
+        print("5 - Rodar demonstracao automatica")
+        print("6 - Explicar complexidade")
+        print("0 - Sair")
+
+        opcao = input("Escolha uma opcao: ").strip()
+
+        if opcao == "1":
+            mostrar_grafo(algoritmo)
+
+        elif opcao == "2":
+            ultimo_historico, ultimo_ciclo = algoritmo.executar(0)
+            mostrar_tabela(ultimo_historico)
+            print("Ciclo negativo:", "sim" if ultimo_ciclo else "nao")
+
+        elif opcao == "3":
+            origem = pedir_inteiro("Vertice de origem (0-4): ", 0, 4)
+            ultimo_historico, ultimo_ciclo = algoritmo.executar(origem)
+            mostrar_tabela(ultimo_historico)
+            print("Ciclo negativo:", "sim" if ultimo_ciclo else "nao")
+
+        elif opcao == "4":
+            if ultimo_historico is None:
+                print("Nenhuma execucao foi feita ainda.")
+            else:
+                mostrar_tabela(ultimo_historico)
+                print("Ciclo negativo:", "sim" if ultimo_ciclo else "nao")
+
+        elif opcao == "5":
+            demonstracao()
+
+        elif opcao == "6":
+            explicar_complexidade(algoritmo.quantidade_vertices, len(algoritmo.arestas))
+
+        elif opcao == "0":
+            print("Encerrando o Dever 2.")
+            break
+
+        else:
+            print("Opcao invalida. Tente novamente.")
+
+
+def main() -> None:
+    """Escolhe entre demonstracao automatica e menu."""
+    print("Dever 2 - Bellman-Ford")
+    print("Digite 'demo' para apresentacao automatica ou pressione Enter para menu.")
+    modo = input("Modo: ").strip().lower()
+
+    if modo == "demo":
+        demonstracao()
+    else:
+        menu_interativo()
+
+
+if __name__ == "__main__":
+    main()
